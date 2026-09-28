@@ -20,8 +20,9 @@ not audited. Everything here runs on testnet with testnet funds.
 Verified as of 2026-09-28:
 
 - The GOL platform is healthy on API 0.5.0, compatibility profile 4 is Active,
-  and `@gol/sdk@0.5.0` is the published `latest`. See
-  `../.local/planning/mandate-demo/PROGRESS.md` for the recorded checks.
+  and `@gol/sdk@0.5.0` is the published `latest`. See the
+  [current availability](https://docs.gol.network/availability) page for the
+  public support boundary.
 - `pnpm typecheck`, `pnpm lint`, `pnpm test` (79 tests), and `pnpm build` all pass.
 - **The sponsored setup succeeded end to end on chain.** The owner EOA
   `0x2A9E395887Da36d8300bd7E51865dE7C297bE118` now carries the delegation
@@ -106,8 +107,8 @@ The two obligations are different and the page shows them separately:
 
 The owner setup, approval, one agent transfer, and the repaired proof panel have
 been verified live. This owner's on-chain refusal has not been exercised.
-Work-order step 6, including a live refusal, and step 7, Vercel deployment, are
-not done.
+The live refusal remains untested for this owner. Vercel deployment is complete;
+the authenticated owner journey has not yet been repeated at the hosted origin.
 
 ## Setup
 
@@ -367,13 +368,29 @@ and then be rejected by Nexus 1.3.3's on-chain initializer, which may accept onl
 27/28. Whether Privy actually returns 0/1 is one of the findings `/spike`
 exists to establish.
 
-## Vercel readiness
+## Vercel deployment
 
-Not deployed. When it is:
+The public project is [gol-mandate-demo.vercel.app](https://gol-mandate-demo.vercel.app).
+The first ready production artifact is `dpl_HY17Kbjmj3fVyjwx6En32Lix6eFV`, built
+from source commit `5f03447` on 2026-09-28. The Vercel project runs Node.js 24
+and stores the GOL, Privy, OpenAI, and agent credentials in sensitive production
+environment variables. Its browser RPC URL is the keyless
+`https://sepolia.base.org`.
 
-- set every server variable from `.env.example` in the Vercel project, and set
-  `NEXT_PUBLIC_PRIVY_APP_ID` there too;
-- add the Vercel domain to the Privy app's allowed origins. `http://localhost:3000`
-  is the only one configured so far;
-- the first public deployment should restrict Privy login to an email allowlist,
-  to protect the OpenAI key and the project's 20-per-day sponsored-setup quota.
+Read-only checks of the production alias returned HTTP 200 for `/` and `/agent`,
+and HTTP 401 for unauthenticated GOL and agent API requests. The local browser
+RPC credential was absent from the downloaded production HTML and scripts.
+These checks establish a deployed shell and route guards; an authenticated
+Privy-to-GOL run on the Vercel origin has not yet been observed.
+
+Before relying on hosted sign-in, confirm that
+`https://gol-mandate-demo.vercel.app` is in the Privy app's allowed domains.
+The local setup notes listed only `http://localhost:3000`, and the dashboard
+setting was not verified during the deployment. Smart wallets and Privy gas
+sponsorship must remain off for this GOL account profile.
+
+The production artifact was uploaded with the Vercel CLI. The Vercel GitHub
+integration could not connect to `Gol-Network/mandate-demo`, so new GitHub pushes
+do not currently deploy this project automatically. Deploy a reviewed source
+commit with `vercel deploy --prod --yes` from this repository until the
+integration has access to the organization.

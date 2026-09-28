@@ -13,7 +13,8 @@ This repository is a working demo of GOL bounded mandates, with three parts:
    mandate and its gas policy. The agent can move funds only within it, and the
    owner can pause, resume, and revoke without the agent.
 
-It runs on `localhost` and is built to deploy to Vercel.
+It runs on `localhost` and is deployed at
+`https://gol-mandate-demo.vercel.app` from a reviewed source commit.
 
 This is a consumer of GOL's public surface. It is not part of GOL.
 
@@ -244,8 +245,11 @@ resolves names against whatever that owner entered.
 
 ## Current state
 
-Work-order steps 1 to 5 are built, and **setup and approval are now proven on chain**. Step 6,
-the end-to-end run, and step 7, Vercel deployment, are not done.
+Work-order steps 1 to 5 are built, and **setup, approval, and one agent transfer are
+proven on chain**. The production Vercel artifact is ready. The owner-specific
+on-chain refusal and an authenticated run at the Vercel origin are not yet proven.
+See `README.md` for the production artifact, read-only checks, Privy domain
+setting, and current manual deployment command.
 
 The sponsored setup succeeded end to end. The owner EOA carries the delegation
 designator `0xef0100` plus the reviewed Nexus 1.3.3 delegate, GOL reports the
