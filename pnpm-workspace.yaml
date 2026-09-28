@@ -27,6 +27,15 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
   workerd: true
+  '@coinbase/x402': false
+  '@opensea/seaport-js': false
+  '@reown/appkit': false
+  bigint-buffer: false
+  bufferutil: false
+  keccak: false
+  opensea-js: false
+  secp256k1: false
+  utf-8-validate: false
 
 # pnpm's release-age gate excludes @gol/sdk 0.5.0. It is the GOL SDK release the
 # profile 4 work order depends on, and it was published 2026-09-28, so it is

@@ -283,7 +283,9 @@ as generated, because nearly all of its application code is placeholder:
 `pnpm-workspace.yaml` carries an explicit `allowBuilds` list. Only the four
 toolchain binaries this project actually runs are allowed to execute build
 scripts. The native modules behind AgentKit's x402, OpenSea, and ethers paths are
-denied, because the demo registers no action provider that can reach them.
+explicitly denied, because the demo registers no action provider that can reach
+them. The explicit `false` entries let a fresh CI install distinguish reviewed
+denials from newly introduced build scripts, which must still fail the install.
 
 ## Layout
 
