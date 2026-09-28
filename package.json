@@ -1,0 +1,43 @@
+{
+  "name": "mandate-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GOL bounded mandate demo: a Privy embedded EOA owner, an OpenAI agent through Coinbase AgentKit, and a GOL mandate between them.",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm lint && pnpm build"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "1.3.24",
+    "@coinbase/agentkit": "0.10.4",
+    "@coinbase/agentkit-vercel-ai-sdk": "0.1.0",
+    "@gol/sdk": "0.5.0",
+    "@privy-io/node": "0.35.0",
+    "@privy-io/react-auth": "3.45.0",
+    "ai": "4.3.19",
+    "jose": "6.2.12",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "viem": "2.37.13",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.1.14",
+    "@types/node": "22.18.9",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.1",
+    "eslint": "9.39.1",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "4.1.14",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22"
+  }
+}

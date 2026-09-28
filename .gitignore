@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+
+# local env files. Only .env.example is committed.
+/.env*
+!/.env.example
+
+# agent keys and wallet material must never be committed
+wallet_data.txt
+*.pem
+*.key
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# misc
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
