@@ -22,7 +22,7 @@ Verified as of 2026-09-28:
 - The GOL platform is healthy on API 0.5.0, compatibility profile 4 is Active,
   and `@gol/sdk@0.5.0` is the published `latest`. See
   `../.local/planning/mandate-demo/PROGRESS.md` for the recorded checks.
-- `pnpm typecheck`, `pnpm lint`, and `pnpm build` all pass.
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` (15 tests), and `pnpm build` all pass.
 - `/spike` implements the sponsored EIP-7702 setup end to end and compiles.
 
 **Not verified:** `/spike` has never been run against live Privy credentials, so
@@ -55,7 +55,11 @@ Never commit it, and never put a real value in `.env.example`.
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI. The model name is read from the environment, never hard-coded. |
 | `AGENT_PRIVATE_KEY` | A fresh test key. The agent holds no funds. |
 | `AGENT_MAX_CHARGE_WEI` | The ceiling the agent may sign for one transfer's gas. |
-| `DEMO_RECIPIENTS` | Addresses only, comma separated. |
+
+There is deliberately **no recipients variable**. Payees are not configuration: the
+owner fills a table of 1 to 16 (name, address) rows in the mandate form, and the agent
+resolves names against whatever that owner entered. A shared list in the environment
+would not be per-owner, and would make the demo's central claim untrue.
 
 Then:
 
@@ -141,16 +145,50 @@ app/
   api/gol/config/route.ts         live gas configuration, proxied
   api/gol/account-status/route.ts detected family, delegation, core installed
   api/gol/eip7702/{prepare,submit,status}/route.ts
+components/
+  mandate-contacts-editor.tsx     the 1 to 16 name/address table
 lib/
   chain.ts                        Base Sepolia and the explorer
+  contacts.ts                     the contact model, validation, and resolution
+  contact-storage.ts              contacts in browser storage
   gol-client.ts                   browser to own-server calls
   privy-signers.ts                Privy to @gol/sdk signer adapters
   server/
     env.ts                        environment access
     gol.ts                        the GOL API client
     privy.ts                      access-token verification, account ownership
+    agent-payees.ts               name resolution from untrusted browser input
     route.ts                      route wrapper and JSON errors
+test/
+  contacts.test.ts                15 tests over the pure contact logic
 ```
+
+## Payees: names are labels, addresses are authority
+
+The owner fills a table of 1 to 16 (name, address) rows when approving a mandate. Only
+the addresses are sent to GOL and hashed into the policy; the name is the owner's own
+label. Two consequences the demo relies on:
+
+- **Renaming a contact needs no new approval.** Only adding, removing, or replacing an
+  address does, because only the address is on-chain. A mandate cannot be amended in
+  place at all, so any address change means revoke plus re-approve.
+- **Names must be unique**, which is what makes resolution deterministic. An ambiguous
+  name is refused at entry rather than guessed at.
+
+The agent resolves what you said in code, never in the model. An exact address wins
+over a name; a name matches case-insensitively after trimming; anything else comes back
+unresolved instead of being coerced. So the model can pick "Alice" but cannot invent a
+payee, because an invented name fails to resolve and the tool refuses.
+
+A payee **outside** the mandate is deliberately allowed through. The agent mentions it
+and the core refuses on-chain with code 65, and that refusal is the demo's proof, so
+blocking it client-side would remove the thing worth showing.
+
+## Testing
+
+`pnpm test` uses Node's built-in runner, so there is no test dependency. Node 22 strips
+the TypeScript types directly, which is why test files import source modules with an
+explicit `.ts` extension.
 
 ## The recovery-byte normalisation
 

@@ -63,11 +63,4 @@ export const serverEnv = {
   get agentMaxChargeWei(): bigint {
     return BigInt(required("AGENT_MAX_CHARGE_WEI"));
   },
-  /** Addresses only, comma separated. No keys, no labels with secrets. */
-  get demoRecipients(): string[] {
-    return (optional("DEMO_RECIPIENTS") ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-  },
 };

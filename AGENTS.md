@@ -68,22 +68,52 @@ pnpm install
 pnpm dev
 pnpm typecheck
 pnpm lint
+pnpm test
 pnpm build
 pnpm start
 pnpm check
 ```
 
-`pnpm check` runs `typecheck`, `lint`, and `build` in that order and is the
+`pnpm check` runs `typecheck`, `lint`, `test`, and `build` in that order and is the
 command to run before committing.
 
-There is no test suite yet. Adding one means adding a runner and a `test`
-script here, and recording both in this file in the same change.
+Tests use Node's built-in runner, `node --test`, with no test dependency. Node 22
+strips the TypeScript types directly, so the test files import source modules with an
+explicit `.ts` extension, which is why `allowImportingTsExtensions` is set in
+`tsconfig.json`. Files under `lib/server/` therefore use relative imports with
+extensions rather than the `@/` alias, so the same modules resolve under both Node
+and Next.
 
-The project holds no database and writes no files at runtime. The only state is
-the GOL API plus browser storage for draft IDs and the cached policy ID.
+The project holds no database and writes no files at runtime. The state is the GOL
+API plus browser storage for draft IDs, the cached policy ID, and the owner's
+contacts.
+
+## Payees are entered by the owner, never configured
+
+There is no recipients environment variable, and there must not be one. The owner
+fills a table of 1 to 16 (name, address) rows in the mandate form, and the agent
+resolves names against whatever that owner entered.
+
+- **Only the address goes on-chain.** The mandate's recipient allowlist is a sorted
+  address set. The name is a label the owner chose, so renaming a contact needs no
+  new approval, while adding, removing, or replacing an address does.
+- **Names and addresses must both be unique.** That is what makes name resolution
+  deterministic. An ambiguous name is rejected at entry rather than guessed at.
+- **Resolution happens in code, never in the model.** The model picks a payee by
+  name; the address that gets signed is the one `resolvePayee` returns for a
+  validated contact. An invented name fails to resolve and the tool refuses, so the
+  model cannot invent a payee.
+- **A payee outside the mandate is allowed through on purpose.** The core refuses it
+  on-chain with code 65, and that refusal is the demo's proof. `inMandate` exists
+  only to let the agent tell the user in advance, never to block.
+- Contact names live in browser storage and travel with each chat request. The server
+  re-validates them with the same rules and discards the whole list if it is
+  contradictory, because it is untrusted input.
 
 ## Current state
 
 Work-order steps 1 and 2 are done, and step 3 (the Privy signing test at
-`/spike`) is built but has never been run against live Privy credentials. See
-`README.md` for what is verified and what is not.
+`/spike`) is built but has never been run against live Privy credentials. The contact
+model and the mandate form's payee table are built and tested. The owner page, the
+approval, the agent, and the proof panel are not built yet. See `README.md` for what
+is verified and what is not.
