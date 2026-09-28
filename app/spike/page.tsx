@@ -22,14 +22,22 @@ import { useLogin, useSign7702Authorization, useWallets } from "@privy-io/react-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPublicClient, http, type Hex } from "viem";
 import { BASE_SEPOLIA, BASE_SEPOLIA_RPC_URL, BASESCAN_TX, shortAddress } from "@/lib/chain";
-import { errorCode, golGet, golPost } from "@/lib/gol-client";
 import {
-  normalizeRecoveryByte,
+  diagnoseAuthorization,
+  type AuthorizationDiagnosis,
+  type AuthorizationSigned,
+} from "@/lib/authorization-diagnosis";
+import { errorCode, golGet, golPost } from "@/lib/gol-client";
+import { AuthorizationFinding } from "@/components/authorization-finding";
+import {
+  boundPrivyAuthorization,
   privyAuthorizationSigner,
   privyRawHashSigner,
   type RawHashProvider,
   type RawSignatureObservation,
 } from "@/lib/privy-signers";
+import { readRawSignature } from "@/lib/raw-signature";
+import { providerChainId, walletChainId } from "@/lib/wallet-chain";
 
 type GasConfiguration = {
   core: `0x${string}`;
@@ -87,6 +95,17 @@ export default function SpikePage() {
   }, [wallets]);
   const account = wallet?.address as `0x${string}` | undefined;
 
+  // Privy's EIP-7702 signer pinned to this account, so a finding about a
+  // recovered address can never be caused by signing with the wrong linked
+  // wallet. See `boundPrivyAuthorization` for why that matters.
+  const boundSignAuthorization = useMemo(
+    () =>
+      account
+        ? boundPrivyAuthorization(signAuthorization, account)
+        : () => Promise.reject(new Error("no_account")),
+    [account, signAuthorization],
+  );
+
   const [configuration, setConfiguration] = useState<GasConfiguration | null>(null);
   const [provider, setProvider] = useState<RawHashProvider | null>(null);
   const [balancesBefore, setBalancesBefore] = useState<Balances | null>(null);
@@ -95,6 +114,7 @@ export default function SpikePage() {
   const [setup, setSetup] = useState<Eip7702Setup | null>(null);
   const [observations, setObservations] = useState<RawSignatureObservation[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
+  const [diagnosis, setDiagnosis] = useState<AuthorizationDiagnosis | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -178,10 +198,34 @@ export default function SpikePage() {
     };
   }, [wallet, provider]);
 
+  /**
+   * The provider, on Base Sepolia.
+   *
+   * A fresh Privy embedded wallet starts on mainnet, and a type-4 transaction
+   * sent to the wrong chain is refused by the wallet rather than relayed. Signing
+   * is unaffected, which is why the setup signatures succeed on any chain and the
+   * owner-paid transactions do not. Privy's own note applies: switching does not
+   * update an existing provider, so the provider is fetched after the switch.
+   */
   const ensureProvider = useCallback(async (): Promise<RawHashProvider> => {
-    if (provider) return provider;
     if (!wallet) throw new Error("no_embedded_wallet");
-    return wallet.getEthereumProvider();
+    if (provider && walletChainId(wallet.chainId) === BASE_SEPOLIA.id) return provider;
+    if (walletChainId(wallet.chainId) !== BASE_SEPOLIA.id) {
+      await wallet.switchChain(BASE_SEPOLIA.id);
+    }
+    const resolved = await wallet.getEthereumProvider();
+
+    // The provider is what `eth_sendTransaction` compares the transaction
+    // against, so it is what has to be confirmed. Privy refuses to switch to a
+    // chain that is not configured, which is why `supportedChains` in
+    // `app/providers.tsx` is load-bearing and not decoration.
+    const chain = await providerChainId(resolved);
+    if (chain !== BASE_SEPOLIA.id) {
+      throw new Error(`wallet_not_on_base_sepolia:provider=${chain}`);
+    }
+
+    setProvider(resolved);
+    return resolved;
   }, [provider, wallet]);
 
   const runPrepare = useCallback(async () => {
@@ -209,6 +253,11 @@ export default function SpikePage() {
     setBusy("sign");
     setError(null);
     const local: RawSignatureObservation[] = [];
+    // Held so a refused authorization can be explained rather than only
+    // reported. The SDK throws one string; this holds the tuple the wallet
+    // returned so the page can name which of five causes it was.
+    let signed: AuthorizationSigned | null = null;
+    setDiagnosis(null);
     try {
       const resolved = await ensureProvider();
 
@@ -219,27 +268,37 @@ export default function SpikePage() {
         method: "secp256k1_sign",
         params: [prepared.initDataHash as Hex],
       })) as Hex;
-      const observation = { raw, ...normalizeRecoveryByte(raw) };
+      // Read the same signature the SDK is about to ask for, so the finding is
+      // recorded even if the SDK refuses it later.
+      const observation = await readRawSignature(
+        raw,
+        prepared.initDataHash as Hex,
+        account,
+      );
       local.push(observation);
       note(
         "secp256k1_sign",
-        `raw recovery byte ${observation.rawRecoveryByte}, normalized ${observation.normalizedRecoveryByte}, shifted ${observation.shifted}`,
+        `last byte ${observation.rawByteHex} (${observation.rawByte}), read as ${observation.encoding}, reports parity ${
+          observation.reportedYParity ?? "nothing usable"
+        }, actual parity ${observation.derivedYParity}, byte agrees ${observation.byteAgrees}`,
       );
 
       const body = await signPreparedEip7702Setup(
         {
           ...(prepared.authorization
             ? {
-                authorization: privyAuthorizationSigner((input) =>
-                  signAuthorization({
+                authorization: privyAuthorizationSigner(async (input) => {
+                  const result = await boundSignAuthorization({
                     contractAddress: input.contractAddress,
                     chainId: input.chainId,
                     nonce: input.nonce,
-                  }),
-                ),
+                  });
+                  signed = result;
+                  return result;
+                }),
               }
             : {}),
-          initialization: privyRawHashSigner(resolved, local),
+          initialization: privyRawHashSigner(resolved, account, local),
         },
         prepared,
         { account },
@@ -260,10 +319,25 @@ export default function SpikePage() {
     } catch (caught) {
       setObservations(local);
       setError(errorCode(caught));
+      // A mismatch is the one refusal with more than one cause, and this page
+      // exists to establish causes. Name it, log it, and show the numbers.
+      if (signed && prepared.authorization) {
+        const diagnosis = await diagnoseAuthorization(
+          {
+            account,
+            chainId: BASE_SEPOLIA.id,
+            address: prepared.authorization.address as `0x${string}`,
+            nonce: Number(BigInt(prepared.authorization.nonce)),
+          },
+          signed,
+        );
+        setDiagnosis(diagnosis);
+        note("authorization finding", `${diagnosis.finding}: ${diagnosis.detail}`);
+      }
     } finally {
       setBusy(null);
     }
-  }, [account, ensureProvider, note, prepared, signAuthorization]);
+  }, [account, boundSignAuthorization, ensureProvider, note, prepared]);
 
   // Poll until the setup settles. The platform confirms at Base's `safe` head,
   // which on 2026-09-28 sat 77 to 99 blocks behind latest, so this can take
@@ -478,23 +552,42 @@ export default function SpikePage() {
             )}
           </section>
 
+          {diagnosis && <AuthorizationFinding diagnosis={diagnosis} />}
+
           {observations.length > 0 && (
             <section className="rounded-lg border border-neutral-300 bg-white p-6">
               <h2 className="font-semibold">Recovery byte findings</h2>
+              <p className="mt-1 text-sm text-neutral-600">
+                The byte is not trusted. For one hash and one <code>r || s</code>{" "}
+                there are exactly two readings, and the one that recovers to the
+                owner is the answer. The reported byte is shown next to it so the
+                provider&apos;s encoding is a recorded fact rather than an
+                assumption.
+              </p>
               <table className="mt-2 w-full font-mono text-sm">
                 <thead>
                   <tr className="text-left text-neutral-500">
-                    <th className="py-1">raw byte</th>
-                    <th className="py-1">normalized</th>
-                    <th className="py-1">shifted</th>
+                    <th className="py-1">last byte</th>
+                    <th className="py-1">read as</th>
+                    <th className="py-1">reported</th>
+                    <th className="py-1">actual</th>
+                    <th className="py-1">agrees</th>
+                    <th className="py-1">handed on as</th>
                   </tr>
                 </thead>
                 <tbody>
                   {observations.map((observation) => (
-                    <tr key={observation.raw}>
-                      <td>{observation.rawRecoveryByte}</td>
-                      <td>{observation.normalizedRecoveryByte}</td>
-                      <td>{String(observation.shifted)}</td>
+                    <tr key={`${observation.hash}-${observation.raw}`}>
+                      <td>
+                        {observation.rawByteHex} ({observation.rawByte})
+                      </td>
+                      <td>{observation.encoding}</td>
+                      <td>
+                        {observation.reportedYParity ?? "nothing usable"}
+                      </td>
+                      <td>{observation.derivedYParity}</td>
+                      <td>{String(observation.byteAgrees)}</td>
+                      <td>{observation.signature.slice(-2)}</td>
                     </tr>
                   ))}
                 </tbody>

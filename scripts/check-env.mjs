@@ -181,4 +181,27 @@ try {
 }
 
 console.log("");
+if (env.OPENAI_API_KEY && env.OPENAI_MODEL) {
+  let response;
+  try {
+    response = await fetch(
+      `https://api.openai.com/v1/models/${encodeURIComponent(env.OPENAI_MODEL)}`,
+      { headers: { authorization: `Bearer ${env.OPENAI_API_KEY}` } },
+    );
+  } catch {
+    console.error("Could not check OPENAI_MODEL access. Check network access and try again.");
+    process.exit(1);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const code = body?.error?.code;
+    console.error(
+      `OPENAI_MODEL ${env.OPENAI_MODEL} is unavailable to this API key ` +
+        `(HTTP ${response.status}${typeof code === "string" ? `, ${code}` : ""}).`,
+    );
+    process.exit(1);
+  }
+  console.log(`OpenAI model ${env.OPENAI_MODEL} is available to this API key.`);
+}
+
 console.log("Ready. Start the dev server with: pnpm dev");

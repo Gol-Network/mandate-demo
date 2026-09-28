@@ -208,7 +208,7 @@ export function MandateForm({
           disabled={!ready}
           className="mt-4 rounded-md bg-neutral-900 px-4 py-2 text-white disabled:opacity-40"
         >
-          {busy ? "Waiting for your signature..." : "Sign and send the approval"}
+          {busy ? "Waiting for your signature..." : "Sign mandate approval"}
         </button>
         {error && (
           <p className="mt-3 rounded-md bg-red-50 p-3 font-mono text-sm text-red-800">

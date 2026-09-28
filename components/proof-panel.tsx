@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { BASE_SEPOLIA, BASE_SEPOLIA_RPC_URL, BASESCAN_TX, shortAddress } from "@/lib/chain";
+import type { ExecutionView } from "@/lib/execution-view";
 import { golPost } from "@/lib/gol-client";
 import {
   buildProof,
@@ -22,15 +23,6 @@ import {
   summarise,
   type TransactionProof,
 } from "@/lib/proof";
-
-export interface ExecutionRow {
-  id: string;
-  state: string;
-  transactionHashes: string[];
-  receipt?: { outcome?: string; refusalCode?: number | null } | null;
-  settledWei?: string | null;
-  ledger?: { category: string; amountWei: string }[];
-}
 
 const client = createPublicClient({
   chain: BASE_SEPOLIA,
@@ -53,7 +45,7 @@ export function ProofPanel({
   usdc: Address;
   assetDecimals: number;
 }) {
-  const [executions, setExecutions] = useState<ExecutionRow[]>([]);
+  const [executions, setExecutions] = useState<ExecutionView[]>([]);
   const [proofs, setProofs] = useState<Record<string, TransactionProof>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,7 +55,7 @@ export function ProofPanel({
     setError(null);
     try {
       const payload = await golPost<{
-        data?: ExecutionRow[];
+        data?: ExecutionView[];
         error?: { code?: string };
       }>("/api/gol/executions", { account, gasPolicyId });
       const rows = payload.data ?? [];
@@ -72,10 +64,10 @@ export function ProofPanel({
       // Decode each execution's receipt independently of what the API said.
       const next: Record<string, TransactionProof> = {};
       for (const row of rows) {
-        const hash = row.transactionHashes[0] as Hex | undefined;
+        const hash = row.transactionHashes?.[0] as Hex | undefined;
         if (!hash) continue;
         try {
-          const receipt = await client.waitForTransactionReceipt({ hash });
+          const receipt = await client.getTransactionReceipt({ hash });
           next[row.id] = buildProof(
             {
               transactionHash: hash,
@@ -123,7 +115,8 @@ export function ProofPanel({
       </div>
       <p className="mt-1 text-sm text-neutral-600">
         Each row shows what GOL says next to what the receipt actually contains, decoded
-        from the GOL core&apos;s own events over public RPC.
+        from the GOL core&apos;s own events over public RPC. A sequencer receipt may
+        appear before GOL settles at Base&apos;s safe head.
       </p>
 
       {error && (
@@ -139,14 +132,16 @@ export function ProofPanel({
       <ul className="mt-4 space-y-4">
         {executions.map((row) => {
           const proof = proofs[row.id];
-          const hash = row.transactionHashes[0];
+          const hash = row.transactionHashes?.[0];
           const apiCode = row.receipt?.refusalCode ?? null;
           const disagree =
             proof && apiCode !== null && proof.refusalCode !== null && proof.refusalCode !== apiCode;
           return (
             <li key={row.id} className="rounded-md border border-neutral-200 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm">{summarise(proof ?? placeholder(row))}</span>
+                <span className="font-mono text-sm">
+                  {proof ? summarise(proof) : hash ? "Waiting for public receipt" : "Waiting for transaction hash"}
+                </span>
                 {hash && (
                   <a
                     className="font-mono text-xs underline"
@@ -189,9 +184,13 @@ export function ProofPanel({
                     </p>
                   )}
                   <p>
-                    owner charged: {isChargeableRefusal(proof.refusalCode ?? 0) ? "yes" : "no, "}
-                    this code is never charged
+                    owner charged: {proof.chargedWei === null
+                      ? "not observed"
+                      : proof.chargedWei > 0n ? weiToEth(proof.chargedWei) : "no"}
                   </p>
+                  {!isChargeableRefusal(proof.refusalCode ?? 0) && (
+                    <p>This refusal code is never chargeable.</p>
+                  )}
                 </div>
               )}
 
@@ -226,26 +225,3 @@ export function ProofPanel({
     </section>
   );
 }
-
-/** Before a receipt is available, still show what the API reported. */
-const placeholder = (row: ExecutionRow): TransactionProof =>
-  ({
-    hash: (row.transactionHashes[0] ?? "0x") as Hex,
-    mined: false,
-    status: "unknown",
-    blockNumber: null,
-    core: [],
-    settlement: [],
-    controls: [],
-    movements: [],
-    executed: false,
-    refused: row.receipt?.refusalCode != null,
-    refusalCode: row.receipt?.refusalCode ?? null,
-    refusalName: null,
-    ruleTag: null,
-    ruleTagName: null,
-    attemptedValue: null,
-    remainingHeadroom: null,
-    chargedWei: null,
-    settledOutcome: null,
-  }) satisfies TransactionProof;

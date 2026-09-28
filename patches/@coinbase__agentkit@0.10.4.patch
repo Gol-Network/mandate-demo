@@ -1,0 +1,26 @@
+diff --git a/dist/action-providers/actionDecorator.js b/dist/action-providers/actionDecorator.js
+index e4291c0cfda3c970f85276313276f1cfc3b7753b..37510c437b6b9b6bbf1aa5aa8555ef29c05e78b4 100644
+--- a/dist/action-providers/actionDecorator.js
++++ b/dist/action-providers/actionDecorator.js
+@@ -50,6 +50,8 @@ function CreateAction(params) {
+                 class_name: target.constructor.name,
+                 method_name: propertyKey,
+                 ...walletMetrics,
++            }).catch((error) => {
++                console.warn("Failed to track agent action invocation:", error);
+             });
+             return originalMethod.apply(this, args);
+         };
+diff --git a/dist/wallet-providers/walletProvider.js b/dist/wallet-providers/walletProvider.js
+index d3b80a6df896483532fa43955d963dbf1027b654..29c1b90f91ae0f08ad3bd62da2925e2bed5d4c5c 100644
+--- a/dist/wallet-providers/walletProvider.js
++++ b/dist/wallet-providers/walletProvider.js
+@@ -31,6 +31,8 @@ class WalletProvider {
+                 network_id: this.getNetwork().networkId,
+                 chain_id: this.getNetwork().chainId,
+                 protocol_family: this.getNetwork().protocolFamily,
++            }).catch((error) => {
++                console.warn("Failed to track wallet provider initialization:", error);
+             });
+         }
+         catch (error) {

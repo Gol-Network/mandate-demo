@@ -1,6 +1,7 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
+import { baseSepolia } from "viem/chains";
 import type { ReactNode } from "react";
 
 /**
@@ -13,6 +14,19 @@ import type { ReactNode } from "react";
  * Active GOL profile supports, and either one could re-delegate the EOA away
  * from the reviewed Nexus 1.3.3 delegate, which GOL refuses with
  * `account_integration_invalid`.
+ *
+ * **`supportedChains` is not optional here, and this was found by running it.**
+ * Privy's documented default is "the first network in `supportedChains`, and
+ * Ethereum mainnet if no `supportedChains` are specified", and `switchChain`
+ * rejects when "the target chain has not been configured". With no
+ * `supportedChains` the embedded wallet sits on mainnet and Base Sepolia is not a
+ * network Privy will switch to at all.
+ *
+ * The failure that causes is unusually well disguised. Signing carries no chain,
+ * so the sponsored setup signs perfectly from a mainnet wallet and GOL's relayer
+ * sends the transaction, which makes the whole setup path look healthy. The owner
+ * only meets it on the first transaction their own wallet pays for, and the error
+ * names a chain mismatch rather than a missing network configuration.
  */
 export function Providers({ children }: { children: ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "";
@@ -37,6 +51,14 @@ export function Providers({ children }: { children: ReactNode }) {
         // Email only, as the handover prompt decided. A login method listed here
         // must also be enabled in the Privy dashboard.
         loginMethods: ["email"],
+        // Base Sepolia and nothing else. This is what makes the embedded wallet
+        // *able* to be on 84532, which is a different thing from the page
+        // switching it there: `switchChain` refuses a chain that has not been
+        // configured, so an absent or wrong list here is a hard wall rather than
+        // a default. Listed first so it is also the default, which means the
+        // wallet is on the right chain before any code runs.
+        supportedChains: [baseSepolia],
+        defaultChain: baseSepolia,
         embeddedWallets: {
           ethereum: { createOnLogin: "users-without-wallets" },
         },

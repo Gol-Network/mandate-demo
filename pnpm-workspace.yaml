@@ -33,3 +33,6 @@ allowBuilds:
 # newer than the gate's default window.
 minimumReleaseAgeExclude:
   - '@gol/sdk@0.5.0'
+
+patchedDependencies:
+  '@coinbase/agentkit@0.10.4': patches/@coinbase__agentkit@0.10.4.patch

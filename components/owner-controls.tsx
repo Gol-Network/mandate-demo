@@ -10,9 +10,9 @@
  * Each action needs one owner signature and the owner's own transaction. The
  * core is never charged for any of them, by design.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signPreparedSafetyAction, type PreparedMandateSafetyAction, type SafetyActionName } from "@gol/sdk";
-import { shortAddress } from "@/lib/chain";
+import { BASESCAN_TX, shortAddress } from "@/lib/chain";
 import { golPost } from "@/lib/gol-client";
 import type { PolicySummary } from "@/lib/use-policy";
 
@@ -38,6 +38,11 @@ export function OwnerControls({
 }) {
   const [busy, setBusy] = useState<SafetyActionName | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signed, setSigned] = useState<{
+    action: SafetyActionName;
+    call: { to: `0x${string}`; data: `0x${string}` };
+  } | null>(null);
+  const [pending, setPending] = useState<{ action: SafetyActionName; hash: `0x${string}` } | null>(null);
 
   const run = async (action: SafetyActionName) => {
     if (!ownerWallet) return;
@@ -60,14 +65,61 @@ export function OwnerControls({
         prepared,
         { action, mandateId: policy.mandateId },
       );
-      const hash = await ownerWallet.sendTransaction(call);
-      onDone(action, hash);
+      setSigned({ action, call });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setBusy(null);
     }
   };
+
+  const send = async () => {
+    if (!signed || !ownerWallet) return;
+    setBusy(signed.action);
+    setError(null);
+    try {
+      const hash = await ownerWallet.sendTransaction(signed.call);
+      setPending({ action: signed.action, hash });
+      setSigned(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!pending) return;
+    let inFlight = false;
+    const confirm = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await golPost<{ status: string }>("/api/gol/safety-action/confirm", {
+          account,
+          gasPolicyId: policy.gasPolicyId,
+          mandateId: policy.mandateId,
+          action: pending.action,
+          transactionHash: pending.hash,
+        });
+        if (result.status === "confirmed") {
+          setPending(null);
+          onDone(pending.action, pending.hash);
+        }
+      } catch (caught) {
+        const code = caught instanceof Error ? caught.name : "";
+        if (["invalid_request", "conflict", "not_found"].includes(code)) {
+          setError(caught instanceof Error ? caught.message : String(caught));
+          setPending(null);
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    void confirm();
+    const timer = setInterval(() => void confirm(), 5000);
+    return () => clearInterval(timer);
+  }, [account, onDone, pending, policy.gasPolicyId, policy.mandateId]);
 
   const paused = policy.status === "paused";
   const terminal = policy.status === "revoked" || policy.status === "expired";
@@ -87,7 +139,7 @@ export function OwnerControls({
         {paused ? (
           <button
             type="button"
-            disabled={busy !== null || !ownerWallet}
+            disabled={busy !== null || !ownerWallet || !!signed || !!pending}
             onClick={() => run("resume")}
             className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-40"
           >
@@ -96,7 +148,7 @@ export function OwnerControls({
         ) : (
           <button
             type="button"
-            disabled={busy !== null || !ownerWallet || terminal}
+            disabled={busy !== null || !ownerWallet || terminal || !!signed || !!pending}
             onClick={() => run("pause")}
             className="rounded-md border border-neutral-300 px-4 py-2 text-sm disabled:opacity-40"
           >
@@ -105,13 +157,35 @@ export function OwnerControls({
         )}
         <button
           type="button"
-          disabled={busy !== null || !ownerWallet || terminal}
+          disabled={busy !== null || !ownerWallet || terminal || !!signed || !!pending}
           onClick={() => run("revoke")}
           className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-800 disabled:opacity-40"
         >
           {busy === "revoke" ? "Revoking..." : "Revoke"}
         </button>
       </div>
+
+      {signed && (
+        <div className="mt-4 rounded-md border border-neutral-300 p-3 text-sm">
+          <p>Your {signed.action} signature is ready. Send the transaction from your wallet.</p>
+          <div className="mt-3 flex gap-3">
+            <button type="button" disabled={busy !== null} onClick={() => void send()}
+              className="rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-40">
+              Send {signed.action} transaction
+            </button>
+            <button type="button" disabled={busy !== null} onClick={() => setSigned(null)}
+              className="rounded-md border border-neutral-300 px-3 py-2 disabled:opacity-40">Cancel</button>
+          </div>
+        </div>
+      )}
+      {pending && (
+        <p className="mt-4 text-sm">
+          {pending.action} sent. Waiting for GOL to confirm at Base&apos;s safe head.{" "}
+          <a href={BASESCAN_TX(pending.hash)} target="_blank" rel="noreferrer" className="font-mono underline">
+            {shortAddress(pending.hash, 10, 6)}
+          </a>
+        </p>
+      )}
 
       {terminal && (
         <p className="mt-3 text-sm text-neutral-600">

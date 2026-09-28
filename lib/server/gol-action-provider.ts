@@ -19,6 +19,7 @@ import { signPreparedGasExecution, type AgentSigner } from "@gol/sdk";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { keccak256, type Address, type Hex } from "viem";
+import { executionView } from "../execution-view.ts";
 import { getGol, golProjectId } from "./gol.ts";
 import { serverEnv } from "./env.ts";
 import { isResolved, resolveForAgent } from "./agent-payees.ts";
@@ -74,23 +75,26 @@ export function parseUsdcAmount(input: string, decimals: number): bigint | null 
 /**
  * Pulls out the fields the demo shows.
  *
- * `refusalCode` and `outcome` live on the receipt, and the transaction hash is
- * the first of `transactionHashes`, so this is the single place that knows the
- * execution response's shape.
+ * The submit response is detailed, while a reconciliation list row is a
+ * summary. Normalise both before telling the owner what happened.
  */
 function factsFrom(
   execution: Record<string, unknown>,
 ): ExecutionFacts {
-  const receipt = (execution.receipt ?? {}) as Record<string, unknown>;
-  const hashes = (execution.transactionHashes ?? []) as unknown;
-  const first = Array.isArray(hashes) ? (hashes[0] as string | undefined) : undefined;
-  return {
+  const view = executionView({
     id: String(execution.id ?? ""),
-    actionId: String(execution.actionId ?? ""),
     state: String(execution.state ?? "unknown"),
-    transactionHash: first ?? null,
-    outcome: (receipt.outcome as string | undefined) ?? null,
-    refusalCode: (receipt.refusalCode as number | undefined) ?? null,
+    transactionHashes: execution.transactionHashes,
+    actionTransactionHash: execution.actionTransactionHash,
+    receipt: execution.receipt,
+  });
+  return {
+    id: view.id,
+    actionId: String(execution.actionId ?? ""),
+    state: view.state,
+    transactionHash: view.transactionHashes[0] ?? null,
+    outcome: view.receipt?.outcome ?? null,
+    refusalCode: view.receipt?.refusalCode ?? null,
   };
 }
 
@@ -213,6 +217,7 @@ export function golActionProvider(
         const gol = getGol();
         const projectId = golProjectId();
 
+        let body: Awaited<ReturnType<typeof signPreparedGasExecution>>;
         try {
           const prepared = await gol.prepareGasExecution(projectId, actionId, {
             mandateId: binding.mandateId,
@@ -222,32 +227,11 @@ export function golActionProvider(
             deadline,
           });
 
-          const body = await signPreparedGasExecution(signer, prepared, {
+          body = await signPreparedGasExecution(signer, prepared, {
             maxChargeWei: serverEnv.agentMaxChargeWei,
           });
-
-          const execution = await gol.submitGasExecution(projectId, actionId, body);
-          const facts = factsFrom(execution as unknown as Record<string, unknown>);
-
-          return asJson({
-            ok: true,
-            ...facts,
-            recipient: payee.address,
-            label: payee.label,
-            inMandate: payee.inMandate,
-            amountUsdc: formatUsdc(amount, assetDecimals),
-            chargeable: facts.refusalCode === null
-              ? null
-              : facts.refusalCode >= CHARGEABLE_REFUSAL_FLOOR,
-            explain: facts.refusalCode === null ? null : explainRefusal(facts.refusalCode),
-            tell_the_user:
-              payee.inMandate === false
-                ? `${payee.label ?? payee.address} is not one of the payees the owner approved, so the owner's mandate will refuse this on-chain.`
-                : null,
-          });
         } catch (error) {
-          // GOL refused before sending anything, for example a paused mandate. No
-          // transaction exists, so there is nothing on chain and nothing charged.
+          // Preparation and signing happen before a submit request exists.
           return asJson({
             ok: false,
             stopped_before_sending: true,
@@ -262,6 +246,50 @@ export function golActionProvider(
               "mandate looks like from here.",
           });
         }
+
+        let execution: Record<string, unknown>;
+        try {
+          execution = await gol.submitGasExecution(projectId, actionId, body) as unknown as Record<string, unknown>;
+        } catch (error) {
+          // A timed-out submit may have reached GOL and the chain. Search by the
+          // action's idempotency key before making any claim about what happened.
+          try {
+            const page = await gol.listGasExecutions(projectId, { limit: 100 });
+            const matched = page.data.find((row) => row.actionId.toLowerCase() === actionId.toLowerCase());
+            if (matched) {
+              execution = matched as unknown as Record<string, unknown>;
+            } else {
+              throw new Error("not_observed");
+            }
+          } catch {
+            return asJson({
+              ok: false,
+              submission_unknown: true,
+              actionId,
+              recipient: payee.address,
+              amountUsdc: formatUsdc(amount, assetDecimals),
+              message: `GOL submission could not be confirmed: ${messageOf(error)}`,
+              explain: "This attempt may have been sent. Check the proof panel or GOL activity before asking for another transfer.",
+            });
+          }
+        }
+        const facts = factsFrom(execution);
+        return asJson({
+          ok: true,
+          ...facts,
+          recipient: payee.address,
+          label: payee.label,
+          inMandate: payee.inMandate,
+          amountUsdc: formatUsdc(amount, assetDecimals),
+          chargeable: facts.refusalCode === null
+            ? null
+            : facts.refusalCode >= CHARGEABLE_REFUSAL_FLOOR,
+          explain: facts.refusalCode === null ? null : explainRefusal(facts.refusalCode),
+          tell_the_user:
+            payee.inMandate === false
+              ? `${payee.label ?? payee.address} is not one of the payees the owner approved, so the owner's mandate will refuse this on-chain.`
+              : null,
+        });
       },
     };
   }
@@ -296,5 +324,3 @@ export function golActionProvider(
 
   return new GolMandateProvider();
 }
-
-

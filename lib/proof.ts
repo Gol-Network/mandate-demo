@@ -106,18 +106,18 @@ export const ruleTagName = (tag: number): string =>
  * Only the fields this demo displays are declared; viem tolerates extra topics.
  */
 const coreEvents = parseAbi([
-  "event MandateActionExecuted(bytes32 indexed mandateId, bytes32 indexed rootId, address indexed agent, address indexed account, bytes32 actionId, uint32 actionTag, uint16 schemaVersion, uint8 mode, bytes32 effects, uint256 seq)",
-  "event MandateActionRefused(bytes32 indexed mandateId, bytes32 indexed rootId, address indexed caller, address indexed account, bytes32 actionId, uint32 actionTag, uint8 mode, uint16 refusalCode, uint16 ruleTag, bytes32 refusingMandateId, uint256 attemptedValue, uint256 remainingHeadroom, uint16 policyVersion, uint256 seq)",
-  "event MandatePaused(bytes32 indexed mandateId)",
-  "event MandateResumed(bytes32 indexed mandateId)",
-  "event MandateRevoked(bytes32 indexed mandateId)",
-  "event MandateCreated(bytes32 indexed mandateId, address indexed account, address indexed agent)",
+  "event MandateActionExecuted(bytes32 indexed mandateId, bytes32 indexed rootId, address indexed agent, address account, bytes32 actionId, uint32 actionTag, uint16 schemaVersion, uint8 mode, (uint16 kind, address asset, address counterparty, uint256 amount)[] effects, uint64 seq)",
+  "event MandateActionRefused(bytes32 indexed mandateId, bytes32 indexed rootId, address indexed caller, address account, bytes32 actionId, uint32 actionTag, uint8 mode, uint16 refusalCode, uint16 ruleTag, bytes32 refusingMandateId, uint256 attemptedValue, uint256 remainingHeadroom, uint8 policyVersion, uint64 seq)",
+  "event MandatePaused(bytes32 indexed mandateId, address indexed by)",
+  "event MandateResumed(bytes32 indexed mandateId, address indexed by)",
+  "event MandateRevoked(bytes32 indexed mandateId, address indexed by)",
+  "event MandateCreated(bytes32 indexed mandateId, address indexed account, address indexed agent, bytes32 rootId, bytes32 parentId, uint8 mode, uint8 policyVersion, bytes32 policyHash, bytes32 accountProfileId, bytes32 projectId, uint48 validFrom, uint48 expiresAt, uint64 installEpoch)",
 ]);
 
 const gasEvents = parseAbi([
-  "event GasSettled(bytes32 indexed policyId, bytes32 indexed actionId, uint8 outcome, uint256 amountWei, uint256 paidWei)",
-  "event GasPolicyCreated(bytes32 indexed policyId, bytes32 indexed mandateId, address indexed account)",
-  "event GasPolicyRevoked(bytes32 indexed policyId)",
+  "event GasSettled(bytes32 indexed policyId, bytes32 indexed actionId, bytes32 indexed mandateId, address account, address submitter, address recipient, uint8 outcome, uint256 gasUnits, uint256 gasPrice, uint256 l1Fee, uint256 operatorFee, uint256 amount, bool paid)",
+  "event GasPolicyApproved(bytes32 indexed policyId, bytes32 indexed mandateId, address indexed account)",
+  "event GasPolicyRevocation(bytes32 indexed policyId)",
 ]);
 
 /** ERC-20 Transfer, for the actual USDC movement. */
@@ -292,7 +292,9 @@ export function buildProof(
   const settled = proof.settlement.find((event) => event.name === "GasSettled");
   if (settled) {
     proof.settledOutcome = Number(settled.args.outcome ?? 0);
-    proof.chargedWei = (settled.args.paidWei as bigint) ?? null;
+    proof.chargedWei = settled.args.paid === true
+      ? (settled.args.amount as bigint) ?? null
+      : 0n;
   }
 
   return proof;

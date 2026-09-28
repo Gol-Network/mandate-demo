@@ -17,13 +17,24 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { BASESCAN_TX, shortAddress } from "@/lib/chain";
 import { golGet } from "@/lib/gol-client";
+import { loadContacts } from "@/lib/contact-storage";
 import { usePolicy } from "@/lib/use-policy";
+import { CopyValue } from "@/components/copy-address";
 import { ProofPanel } from "@/components/proof-panel";
+import { SignOutButton } from "@/components/sign-out-button";
 import type { Contact } from "@/lib/contacts";
 
 interface FullConfiguration {
   core: `0x${string}`;
   asset: { address: `0x${string}`; symbol: string; decimals: number };
+}
+
+async function authenticatedChatFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const token = await getAccessToken();
+  if (!token) throw new Error("Your Privy session has ended. Sign in again before asking the agent to act.");
+  const headers = new Headers(init?.headers);
+  headers.set("authorization", `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
 }
 
 export default function AgentPage() {
@@ -32,32 +43,15 @@ export default function AgentPage() {
   const { wallets, ready } = useWallets();
 
   const wallet = useMemo(
-    () => wallets.find((candidate) => candidate.walletClientType === "privy") ?? wallets[0],
+    () => wallets.find((candidate) => candidate.walletClientType === "privy"),
     [wallets],
   );
   const account = wallet?.address as `0x${string}` | undefined;
   const { policy } = usePolicy(account);
 
   const [configuration, setConfiguration] = useState<FullConfiguration | null>(null);
-  const [token, setToken] = useState("");
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [storedContacts, setStoredContacts] = useState<{ key: string; rows: Contact[] } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  // The Privy access token goes in the Authorization header. It is read once per
-  // page load and refreshed if it ever comes back empty.
-  useEffect(() => {
-    let cancelled = false;
-    getAccessToken()
-      .then((value) => {
-        if (!cancelled) setToken(value ?? "");
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError("Could not read your Privy session.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [account]);
 
   useEffect(() => {
     if (!account) return;
@@ -84,25 +78,21 @@ export default function AgentPage() {
     // is derived below rather than stored, so nothing is cleared here. The write
     // is synchronous because localStorage is, and the rule assumes a network read.
     if (!user?.id || !policy) return;
-    try {
-      const stored = window.localStorage.getItem(
-        `gol-demo.contacts.v1:${user.id}:${policy.gasPolicyId}`,
-      );
-      const parsed = stored ? (JSON.parse(stored) as Contact[]) : [];
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setContacts(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setContacts([]);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStoredContacts({
+      key: `${user.id}:${policy.gasPolicyId}`,
+      rows: loadContacts(user.id, policy.gasPolicyId),
+    });
   }, [policy, user?.id]);
 
   // Derived: with no user or policy there are no contacts to show.
-  const visibleContacts = user?.id && policy ? contacts : [];
+  const visibleContacts = user?.id && policy &&
+    storedContacts?.key === `${user.id}:${policy.gasPolicyId}` ? storedContacts.rows : [];
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: "/api/agent/chat",
     streamProtocol: "data",
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    fetch: authenticatedChatFetch,
     body: {
       account: account ?? "",
       gasPolicyId: policy?.gasPolicyId ?? "",
@@ -168,11 +158,15 @@ export default function AgentPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Agent</h1>
-        <span className="font-mono text-xs text-neutral-500">
-          policy {shortAddress(policy.gasPolicyId)}
-        </span>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Agent</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <CopyValue value={account} label="owner" explorer />
+            <CopyValue value={policy.gasPolicyId} label="policy" lead={10} tail={6} />
+          </div>
+        </div>
+        <SignOutButton />
       </header>
 
       <section className="mt-3 rounded-md border border-neutral-200 bg-white p-3 text-sm text-neutral-700">

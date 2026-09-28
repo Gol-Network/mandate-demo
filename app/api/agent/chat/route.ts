@@ -21,6 +21,7 @@ import { streamText, type CoreMessage } from "ai";
 import { createWalletClient, http, type Chain, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
+import { agentErrorDetails, agentErrorMessage } from "@/lib/server/agent-error";
 import { normaliseKey } from "@/lib/server/agent-key";
 import { serverEnv } from "@/lib/server/env";
 import { getGol, golProjectId } from "@/lib/server/gol";
@@ -142,9 +143,14 @@ export async function POST(request: Request) {
       messages,
       tools: getVercelAITools(agentkit),
       maxSteps: 8,
+      onError: ({ error }) => {
+        // The HTTP response has already started when a stream fails. Log only
+        // provider status and code, never a prompt, key, or response body.
+        console.error("[gol-demo] agent stream failed", agentErrorDetails(error));
+      },
     });
 
-    return result.toDataStreamResponse();
+    return result.toDataStreamResponse({ getErrorMessage: agentErrorMessage });
   } catch (error) {
     return jsonError(error);
   }

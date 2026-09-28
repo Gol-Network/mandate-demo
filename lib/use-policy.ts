@@ -32,12 +32,22 @@ const writeHint = (account: string, gasPolicyId: string) => {
   }
 };
 
+const readHint = (account: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(`${HINT_KEY}:${account.toLowerCase()}`);
+  } catch {
+    return null;
+  }
+};
+
 export function usePolicy(account: string | undefined) {
-  const [raw, setRaw] = useState<PolicySummary[]>([]);
+  const [raw, setRaw] = useState<{ account: string; data: PolicySummary[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<{ account: string; id: string | null } | null>(null);
   // No account means no policies, derived rather than cleared from an effect.
-  const policies = account ? raw : [];
+  const policies = account && raw?.account === account.toLowerCase() ? raw.data : [];
 
   const refresh = useCallback(async () => {
     if (!account) return;
@@ -47,9 +57,9 @@ export function usePolicy(account: string | undefined) {
       const result = await golPost<{ data: PolicySummary[] }>("/api/gol/policies", {
         account,
       });
-      setRaw(result.data);
+      setRaw({ account: account.toLowerCase(), data: result.data });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.name : String(caught));
+      setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setLoading(false);
     }
@@ -63,16 +73,29 @@ export function usePolicy(account: string | undefined) {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!account) return;
+    // Browser storage only chooses among policies returned for this owner.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHint({ account: account.toLowerCase(), id: readHint(account) });
+  }, [account]);
+
   // The policy the page acts on. An active one wins; a paused one is shown next so
   // the owner can resume it. Both are read from the API on every load, so a stale
   // cached hint can never make the page act on a policy that is not there.
-  const active = policies.find((policy) => policy.status === "active") ?? null;
-  const paused = policies.find((policy) => policy.status === "paused") ?? null;
+  const hintedId = hint && hint.account === account?.toLowerCase() ? hint.id : null;
+  const activePolicies = policies.filter((policy) => policy.status === "active");
+  const pausedPolicies = policies.filter((policy) => policy.status === "paused");
+  const active = activePolicies.find((policy) => policy.gasPolicyId === hintedId) ?? activePolicies[0] ?? null;
+  const paused = pausedPolicies.find((policy) => policy.gasPolicyId === hintedId) ?? pausedPolicies[0] ?? null;
   const policy = active ?? paused;
 
   const remember = useCallback(
     (gasPolicyId: string) => {
-      if (account) writeHint(account, gasPolicyId);
+      if (account) {
+        writeHint(account, gasPolicyId);
+        setHint({ account: account.toLowerCase(), id: gasPolicyId });
+      }
     },
     [account],
   );
