@@ -71,11 +71,19 @@ pnpm lint
 pnpm test
 pnpm build
 pnpm start
+pnpm key:agent
 pnpm check
 ```
 
 `pnpm check` runs `typecheck`, `lint`, `test`, and `build` in that order and is the
 command to run before committing.
+
+`pnpm key:agent` generates the agent's disposable signing key, writes it to
+`.env.local`, and prints only the derived address. Never add the key by hand or
+paste one into chat. It refuses to overwrite an existing key unless given `--force`,
+and it always converges the file on exactly one key line.
+
+To create a local env file: `cp .env.example .env.local`, then fill it in.
 
 Tests use Node's built-in runner, `node --test`, with no test dependency. Node 22
 strips the TypeScript types directly, so the test files import source modules with an
