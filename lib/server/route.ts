@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { GolApiError, GolTransportError } from "@gol/sdk/server";
-import { ForbiddenError, UnauthorizedError } from "./privy";
+import { ForbiddenError, UnauthorizedError } from "./privy.ts";
 
 export function jsonError(error: unknown): NextResponse {
   if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {

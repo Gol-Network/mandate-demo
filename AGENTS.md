@@ -126,8 +126,21 @@ resolves names against whatever that owner entered.
 
 ## Current state
 
-Work-order steps 1 and 2 are done, and step 3 (the Privy signing test at
-`/spike`) is built but has never been run against live Privy credentials. The contact
-model and the mandate form's payee table are built and tested. The owner page, the
-approval, the agent, and the proof panel are not built yet. See `README.md` for what
-is verified and what is not.
+Work-order steps 1 to 5 are built. Step 6, the end-to-end run, and step 7, Vercel
+deployment, are not done.
+
+**Nothing has been run against the live chain.** The owner page, the approval, the
+agent, and the proof panel compile and pass typecheck, lint, and 23 tests, but no
+Privy login, sponsored setup, approval, transfer, or refusal has been executed. The
+Privy signing findings are still unknown. See `README.md` for the full boundary.
+
+## Heavy dependencies and the build
+
+`@coinbase/agentkit` is loaded with a dynamic `import()` inside the chat route, never
+at module scope. Two reasons: its dependency graph is very large, and a static import
+made Next's build-time route collection fail with `TypeError: X is not a function`
+while evaluating the bundle.
+
+`lib/server/agent-key.ts` exists only so `/api/gol/agent-address` can read the
+agent's address without pulling AgentKit in. Do not import the key helpers from
+`gol-action-provider.ts`; that reintroduces the build failure.

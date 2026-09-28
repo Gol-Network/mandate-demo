@@ -5,7 +5,7 @@
  * because route handlers are always server-side.
  */
 import { GolApiClient } from "@gol/sdk/server";
-import { serverEnv } from "./env";
+import { serverEnv } from "./env.ts";
 
 let client: GolApiClient | undefined;
 

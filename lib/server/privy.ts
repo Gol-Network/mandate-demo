@@ -16,7 +16,7 @@
 import { PrivyClient, verifyAccessToken } from "@privy-io/node";
 import { createRemoteJWKSet, type JWTVerifyGetKey } from "jose";
 import { getAddress, isAddress } from "viem";
-import { serverEnv } from "./env";
+import { serverEnv } from "./env.ts";
 
 const PRIVY_API_URL = "https://api.privy.io";
 
