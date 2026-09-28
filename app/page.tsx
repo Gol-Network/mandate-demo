@@ -246,7 +246,7 @@ export default function OwnerPage() {
     setBusy(true);
     setError(null);
     try {
-      const { prepared, salt } = await golPost<{ prepared: PreparedGasPolicy; salt: Hex }>(
+      const prepared = await golPost<PreparedGasPolicy>(
         "/api/gol/prepare-policy",
         formToRequest(values, account, agent),
       );
@@ -272,8 +272,8 @@ export default function OwnerPage() {
       setPending({ draftId: prepared.draftId, txHash });
       setStep("approval-pending");
       setNote(
-        `Approval sent. GOL confirms at Base's safe head, so this can take several ` +
-          `minutes. Salt ${salt.slice(0, 10)}.`,
+        "Approval sent. GOL confirms at Base's safe head, which is behind the " +
+          "latest head, so this can take several minutes.",
       );
     } catch (caught) {
       setError(describe(caught));
