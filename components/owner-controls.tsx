@@ -43,6 +43,7 @@ export function OwnerControls({
     call: { to: `0x${string}`; data: `0x${string}` };
   } | null>(null);
   const [pending, setPending] = useState<{ action: SafetyActionName; hash: `0x${string}` } | null>(null);
+  const [inclusion, setInclusion] = useState<string>("observing");
 
   const run = async (action: SafetyActionName) => {
     if (!ownerWallet) return;
@@ -80,6 +81,7 @@ export function OwnerControls({
     try {
       const hash = await ownerWallet.sendTransaction(signed.call);
       setPending({ action: signed.action, hash });
+      setInclusion("observing");
       setSigned(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -104,7 +106,18 @@ export function OwnerControls({
         });
         if (result.status === "confirmed") {
           setPending(null);
+          setInclusion("observing");
           onDone(pending.action, pending.hash);
+        } else if (result.status === "included") {
+          setInclusion("included");
+        } else if (result.status === "orphaned") {
+          setInclusion("orphaned");
+        } else if (result.status === "reverted" || result.status === "mismatch") {
+          setPending(null);
+          setInclusion(result.status);
+          setError(result.status === "reverted"
+            ? "The owner transaction reverted. The mandate did not change."
+            : "The transaction did not perform the expected owner action.");
         }
       } catch (caught) {
         const code = caught instanceof Error ? caught.name : "";
@@ -117,9 +130,9 @@ export function OwnerControls({
       }
     };
     void confirm();
-    const timer = setInterval(() => void confirm(), 5000);
+    const timer = setInterval(() => void confirm(), inclusion === "included" ? 10_000 : 1_000);
     return () => clearInterval(timer);
-  }, [account, onDone, pending, policy.gasPolicyId, policy.mandateId]);
+  }, [account, inclusion, onDone, pending, policy.gasPolicyId, policy.mandateId]);
 
   const paused = policy.status === "paused";
   const terminal = policy.status === "revoked" || policy.status === "expired";
@@ -180,7 +193,11 @@ export function OwnerControls({
       )}
       {pending && (
         <p className="mt-4 text-sm">
-          {pending.action} sent. Waiting for GOL to confirm at Base&apos;s safe head.{" "}
+          {pending.action} sent. {inclusion === "included"
+            ? "Included on Base Sepolia, pending safe-head confirmation."
+            : inclusion === "orphaned"
+              ? "The transaction left the current chain. Checking for re-inclusion."
+              : "Checking for inclusion through Alchemy RPC."}{" "}
           <a href={BASESCAN_TX(pending.hash)} target="_blank" rel="noreferrer" className="font-mono underline">
             {shortAddress(pending.hash, 10, 6)}
           </a>

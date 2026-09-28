@@ -12,7 +12,7 @@
  * honest. A refusal is a durable on-chain record, verifiable from public
  * infrastructure by anyone.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { BASE_SEPOLIA, BASE_SEPOLIA_RPC_URL, BASESCAN_TX, shortAddress } from "@/lib/chain";
 import type { ExecutionView } from "@/lib/execution-view";
@@ -49,6 +49,8 @@ export function ProofPanel({
   const [proofs, setProofs] = useState<Record<string, TransactionProof>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const receiptReadAt = useRef<Record<string, number>>({});
+  const proofCache = useRef<Record<string, TransactionProof>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,12 +64,14 @@ export function ProofPanel({
       setExecutions(rows);
 
       // Decode each execution's receipt independently of what the API said.
-      const next: Record<string, TransactionProof> = {};
+      const next: Record<string, TransactionProof> = { ...proofCache.current };
       for (const row of rows) {
         const hash = row.transactionHashes?.[0] as Hex | undefined;
         if (!hash) continue;
+        if (Date.now() - (receiptReadAt.current[hash] ?? 0) < 15_000) continue;
         try {
           const receipt = await client.getTransactionReceipt({ hash });
+          receiptReadAt.current[hash] = Date.now();
           next[row.id] = buildProof(
             {
               transactionHash: hash,
@@ -82,6 +86,7 @@ export function ProofPanel({
           // shows the API's view, and the receipt is picked up on the next poll.
         }
       }
+      proofCache.current = next;
       setProofs(next);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -92,12 +97,12 @@ export function ProofPanel({
 
   useEffect(() => {
     // Polling on a timer is the intended pattern: the point is to pick up a
-    // receipt that is not mined yet, since the platform settles minutes behind
-    // the latest head. The rule being bent is only about setting the loading flag
+    // receipt that is not mined yet, since the platform settles after inclusion.
+    // The rule being bent is only about setting the loading flag
     // synchronously on the first call.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-    const timer = setInterval(() => void load(), 8000);
+    const timer = setInterval(() => void load(), 2000);
     return () => clearInterval(timer);
   }, [load]);
 
@@ -116,7 +121,8 @@ export function ProofPanel({
       <p className="mt-1 text-sm text-neutral-600">
         Each row shows what GOL says next to what the receipt actually contains, decoded
         from the GOL core&apos;s own events over public RPC. A sequencer receipt may
-        appear before GOL settles at Base&apos;s safe head.
+        appear before GOL settles at Base&apos;s safe head. GOL&apos;s `included`
+        observation is provisional and separate from settlement.
       </p>
 
       {error && (
@@ -159,6 +165,15 @@ export function ProofPanel({
                   <dt className="inline text-neutral-500">GOL: </dt>
                   <dd className="inline">
                     state {row.state}
+                    {row.inclusion?.state === "included"
+                      ? `, ${row.inclusion.finalizedAt ? "finalized" : "included provisionally"} (${row.inclusion.outcome ?? "unknown"})`
+                      : row.inclusion?.state === "orphaned"
+                        ? ", previous inclusion orphaned"
+                        : row.inclusion?.state === "reverted"
+                          ? ", transaction reverted"
+                          : row.inclusion?.state === "mismatch"
+                            ? ", GOL effect mismatch"
+                            : row.inclusion?.state ? `, inclusion ${row.inclusion.state}` : ""}
                     {row.receipt?.outcome ? `, outcome ${row.receipt.outcome}` : ""}
                     {apiCode !== null ? `, refusal ${apiCode}` : ""}
                   </dd>

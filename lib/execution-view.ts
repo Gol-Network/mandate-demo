@@ -4,6 +4,7 @@ export interface ExecutionView {
   state: string;
   transactionHashes: `0x${string}`[];
   receipt: { outcome: string; refusalCode: number | null } | null;
+  inclusion: { state: string; outcome: string | null; transactionHash: string; finalizedAt: string | null } | null;
 }
 
 interface ExecutionLike {
@@ -12,6 +13,7 @@ interface ExecutionLike {
   transactionHashes?: unknown;
   actionTransactionHash?: unknown;
   receipt?: unknown;
+  inclusion?: unknown;
 }
 
 const isHash = (value: unknown): value is `0x${string}` =>
@@ -27,6 +29,8 @@ export function hashesFromExecution(execution: ExecutionLike): `0x${string}`[] {
 
 export function executionView(execution: ExecutionLike): ExecutionView {
   const rawReceipt = execution.receipt;
+  const rawInclusion = execution.inclusion && typeof execution.inclusion === "object"
+    ? execution.inclusion as Record<string, unknown> : null;
   const receipt = rawReceipt && typeof rawReceipt === "object"
     ? rawReceipt as Record<string, unknown>
     : null;
@@ -40,6 +44,14 @@ export function executionView(execution: ExecutionLike): ExecutionView {
     id: execution.id,
     state: execution.state,
     transactionHashes: hashesFromExecution(execution),
+    inclusion: rawInclusion && typeof rawInclusion.state === "string" && isHash(rawInclusion.transactionHash)
+      ? {
+        state: rawInclusion.state,
+        outcome: typeof rawInclusion.outcome === "string" ? rawInclusion.outcome : null,
+        transactionHash: rawInclusion.transactionHash,
+        finalizedAt: typeof rawInclusion.finalizedAt === "string" ? rawInclusion.finalizedAt : null,
+      }
+      : null,
     receipt: receipt && typeof receipt.outcome === "string"
       ? { outcome: receipt.outcome, refusalCode }
       : null,
