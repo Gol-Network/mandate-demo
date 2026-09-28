@@ -67,10 +67,24 @@ export default function SpikePage() {
   const { wallets, ready } = useWallets();
   const { signAuthorization } = useSign7702Authorization();
 
-  const wallet = useMemo(
-    () => wallets.find((candidate) => candidate.walletClientType === "privy"),
-    [wallets],
-  );
+  // `walletClientType` is optional in Privy's type, so matching on it alone would
+  // silently find nothing and look like a failed login. Prefer the Privy wallet,
+  // fall back to any linked wallet that can produce an EIP-1193 provider, and
+  // surface what is actually there when neither matches.
+  const { wallet, rejectedTypes } = useMemo(() => {
+    const usable = wallets.filter((candidate) =>
+      typeof candidate.getEthereumProvider === "function",
+    );
+    const privy = usable.find(
+      (candidate) => candidate.walletClientType === "privy",
+    );
+    return {
+      wallet: privy ?? usable[0],
+      rejectedTypes: wallets.map(
+        (candidate) => candidate.walletClientType ?? "unspecified",
+      ),
+    };
+  }, [wallets]);
   const account = wallet?.address as `0x${string}` | undefined;
 
   const [configuration, setConfiguration] = useState<GasConfiguration | null>(null);
@@ -292,6 +306,12 @@ export default function SpikePage() {
       ) : !wallet ? (
         <div className="mt-6 rounded-lg border border-neutral-300 bg-white p-6">
           <p>Not logged in. The demo owner is a Privy embedded wallet.</p>
+          {rejectedTypes.length > 0 && (
+            <p className="mt-2 font-mono text-xs text-amber-700">
+              {wallets.length} wallet(s) linked but none usable:{" "}
+              {rejectedTypes.join(", ")}
+            </p>
+          )}
           <button
             type="button"
             onClick={login}
