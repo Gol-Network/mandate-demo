@@ -72,6 +72,7 @@ pnpm test
 pnpm build
 pnpm start
 pnpm key:agent
+pnpm doctor
 pnpm check
 ```
 
@@ -82,6 +83,11 @@ command to run before committing.
 `.env.local`, and prints only the derived address. Never add the key by hand or
 paste one into chat. It refuses to overwrite an existing key unless given `--force`,
 and it always converges the file on exactly one key line.
+
+`pnpm doctor` checks `.env.local`, calls `GET /v1/whoami` with the configured key, and
+reports the project, environment, and scopes. It resolves the GOL project ID from the
+key, so `GOL_PROJECT_ID` never has to be copied by hand; add `--write` to have it
+written into `.env.local` for you. It prints no secret values.
 
 To create a local env file: `cp .env.example .env.local`, then fill it in.
 

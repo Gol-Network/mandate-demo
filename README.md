@@ -46,6 +46,23 @@ pnpm install
 Copy `.env.example` to `.env.local` and fill it in. `.env.local` is gitignored.
 Never commit it, and never put a real value in `.env.example`.
 
+```sh
+cp .env.example .env.local
+pnpm key:agent          # the agent's disposable signing key, printed as an address only
+pnpm doctor --write     # validates the GOL key and fills in GOL_PROJECT_ID
+```
+
+`pnpm doctor` calls `GET /v1/whoami` with your key and reports the project,
+environment, and scopes, then fetches `gas-configuration` to confirm hosted gas is
+actually reachable for that project. The project ID is the project's **UUID**; the
+SDK's `contractProjectId` packs it into 32 bytes for the on-chain terms, but the
+platform does that itself, so the demo only ever needs the UUID. `pnpm doctor` reads
+it out of the key's identity, so there is nothing to copy by hand.
+
+The key must be a **`gol_test_`** key. Hosted gas refuses a live key with
+`capability_unavailable`. Every project currently reports its `live` environment as
+`unavailable` anyway, so a key you create now is a test key.
+
 | Variable | Where it goes |
 |---|---|
 | `NEXT_PUBLIC_PRIVY_APP_ID` | Privy dashboard. Public. |

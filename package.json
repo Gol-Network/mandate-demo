@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
     "key:agent": "node scripts/generate-agent-key.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build"
   },
   "dependencies": {
