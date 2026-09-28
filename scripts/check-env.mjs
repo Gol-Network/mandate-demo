@@ -1,16 +1,16 @@
 /**
  * Checks `.env.local` and resolves the GOL project ID from the API key.
  *
- *   pnpm doctor
- *   pnpm doctor --write     also writes GOL_PROJECT_ID back into .env.local
+ *   pnpm check:env
+ *   pnpm check:env --write   also writes GOL_PROJECT_ID back into .env.local
  *
  * The project ID is the project's UUID, not the on-chain form. The SDK's
  * `contractProjectId` packs it into 32 bytes for the mandate terms, but the
  * platform does that itself, so the demo only ever needs the UUID.
  *
  * Nothing secret is printed. The key is read from the file, used in a request
- * header, and never echoed. Only the last four characters of the key hint are
- * shown, because that is what the platform itself returns.
+ * header, and never echoed. Only the last few characters of the platform's own
+ * key hint are shown, because that is what the API returns.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -41,14 +41,15 @@ function parseEnv(contents) {
   return values;
 }
 
-const REQUIRED = [
-  "NEXT_PUBLIC_PRIVY_APP_ID",
-  "PRIVY_APP_SECRET",
-  "GOL_API_KEY",
-  "OPENAI_API_KEY",
-  "OPENAI_MODEL",
-  "AGENT_PRIVATE_KEY",
-];
+// Hard requirements for this check and for the Privy signing test.
+// GOL_PROJECT_ID is deliberately absent: this script resolves it from the key.
+const REQUIRED = ["NEXT_PUBLIC_PRIVY_APP_ID", "PRIVY_APP_SECRET", "GOL_API_KEY"];
+
+// Needed only by the agent. A warning, never fatal: the signing test does not use
+// them, and failing on them would stop this script doing the one thing it exists
+// for, which is resolving the project ID.
+const AGENT_ONLY = ["OPENAI_API_KEY", "OPENAI_MODEL", "AGENT_PRIVATE_KEY"];
+
 const OPTIONAL_OK_EMPTY = [
   "GOL_PROJECT_ID",
   "GOL_API_BASE_URL",
@@ -67,32 +68,26 @@ if (missing.length > 0) {
   console.error("Missing or empty in .env.local:");
   for (const key of missing) console.error(`  ${key}`);
   console.error("");
-  // The spike and the agent need different things, and saying so is more useful
-  // than implying the first N of an arbitrary list.
-  const spikeOnly = [
-    "NEXT_PUBLIC_PRIVY_APP_ID",
-    "PRIVY_APP_SECRET",
-    "GOL_API_KEY",
-    "GOL_PROJECT_ID",
-  ];
-  const stillNeededForSpike = spikeOnly.filter(
-    (key) => !env[key] || missing.includes(key),
-  );
-  if (stillNeededForSpike.length > 0) {
-    console.error("The Privy signing test needs only these four:");
-    for (const key of stillNeededForSpike) console.error(`  ${key}`);
-    console.error("");
-  }
-  console.error("The OpenAI pair is only needed for the agent, not the spike.");
+  console.error("The Privy signing test needs exactly these three, plus the");
+  console.error("GOL_PROJECT_ID this script resolves from the key.");
   process.exit(1);
 }
 
-console.log(".env.local looks complete.");
+console.log(".env.local has what the Privy signing test needs.");
 for (const key of OPTIONAL_OK_EMPTY) {
   console.log(`  ${env[key] ? key : `${key} (blank, using the default)`}`);
 }
 
-// The project ID is the one value we can resolve without asking.
+const absentForAgent = AGENT_ONLY.filter((key) => !env[key]);
+if (absentForAgent.length > 0) {
+  console.log("");
+  console.log("Not set, and needed only by the agent, not the signing test:");
+  for (const key of absentForAgent) {
+    const hint = key === "AGENT_PRIVATE_KEY" ? "  (run: pnpm key:agent)" : "";
+    console.log(`  ${key}${hint}`);
+  }
+}
+
 const baseUrl = env.GOL_API_BASE_URL || "https://api.gol.network";
 const headers = { accept: "application/json", authorization: `Bearer ${env.GOL_API_KEY}` };
 
@@ -136,9 +131,11 @@ if (!String(environment).startsWith("test")) {
 }
 
 const projectId = project.id;
+
 if (env.GOL_PROJECT_ID && env.GOL_PROJECT_ID !== projectId) {
-  console.error(`GOL_PROJECT_ID is set to ${env.GOL_PROJECT_ID} but the key belongs to`);
-  console.error(`project ${projectId}. Those disagree, so requests would fail.`);
+  console.error(`GOL_PROJECT_ID is set to a different project than this key`);
+  console.error(`belongs to. Requests would fail, so refusing to continue.`);
+  console.error(`Re-run with the correct value, or delete the line.`);
   process.exit(1);
 }
 
@@ -147,21 +144,18 @@ if (!env.GOL_PROJECT_ID) {
     const contents = readFileSync(ENV_PATH, "utf8");
     const updated = /^GOL_PROJECT_ID=/m.test(contents)
       ? contents.replace(/^GOL_PROJECT_ID=.*$/m, `GOL_PROJECT_ID=${projectId}`)
-      : contents.replace(
-          /^GOL_API_KEY=.*$/m,
-          (line) => `${line}\nGOL_PROJECT_ID=${projectId}`,
-        );
+      : contents.replace(/^GOL_API_KEY=.*$/m, (line) => `${line}\nGOL_PROJECT_ID=${projectId}`);
     writeFileSync(ENV_PATH, updated);
-    console.log(`Wrote GOL_PROJECT_ID=${projectId} to .env.local.`);
+    console.log("Wrote GOL_PROJECT_ID to .env.local.");
   } else {
-    console.log(`GOL_PROJECT_ID is not set. Add this line to .env.local:`);
+    console.log("GOL_PROJECT_ID is not set. Add this line to .env.local:");
     console.log("");
     console.log(`GOL_PROJECT_ID=${projectId}`);
     console.log("");
     console.log("Or re-run with --write and it will be filled in for you.");
   }
 } else {
-  console.log(`GOL_PROJECT_ID is set and matches the key.`);
+  console.log("GOL_PROJECT_ID is set and matches the key.");
 }
 
 // Confirm the hosted gas surface this demo depends on is actually reachable.
@@ -180,7 +174,7 @@ try {
   console.log(`  maxPerActionWei ${configuration.limits.maxPerActionWei}`);
 } catch (error) {
   console.error("");
-  console.error(`The key authenticated, but the gas configuration was refused.`);
+  console.error("The key authenticated, but the gas configuration was refused.");
   console.error(`  ${error.message}`);
   console.error("  The key most likely needs the project:read scope.");
   process.exit(1);
