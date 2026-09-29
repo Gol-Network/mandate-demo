@@ -21,9 +21,9 @@ do not currently trigger this Vercel deployment.
 
 This is a consumer of GOL's public surface. It is not part of GOL.
 
-The local source now has a provisional inclusion display for an unreleased
-platform API 0.6.0 candidate. It keeps the published SDK 0.5.1 dependency
-until the new package is released, and no hosted demo acceptance is implied.
+The local source has a provisional inclusion display for hosted API 0.6.0 and
+published SDK 0.6.0. The Vercel artifact from source `5f03447` predates this
+change, and no authenticated hosted demo acceptance is implied.
 
 ## Boundaries
 

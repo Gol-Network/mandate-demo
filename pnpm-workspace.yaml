@@ -38,9 +38,9 @@ allowBuilds:
   utf-8-validate: false
 
 # pnpm's release-age gate excludes the reviewed GOL SDK releases needed by
-# the profile 4 demo. Both were published 2026-09-28, within the gate's window.
+# the profile 4 demo. Version 0.6.0 was published 2026-09-29 within the gate's window.
 minimumReleaseAgeExclude:
-  - '@gol/sdk@0.5.0 || 0.5.1'
+  - '@gol/sdk@0.5.0 || 0.5.1 || 0.6.0'
 
 patchedDependencies:
   '@coinbase/agentkit@0.10.4': patches/@coinbase__agentkit@0.10.4.patch

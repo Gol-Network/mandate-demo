@@ -7,15 +7,14 @@ the agent.
 This is a consumer of GOL's public SDK and API. It is not part of GOL, and it is
 not audited. Everything here runs on testnet with testnet funds.
 
-This source checkout also includes an unreleased provisional inclusion display.
+This source checkout includes a provisional inclusion display for hosted API 0.6.0.
 It checks approval, setup, and owner safety status every second until
 inclusion, then checks approval and safety safe-head confirmation every 10
 seconds. Action status is checked every two seconds. The UI shows `included`
 separately from safe-head confirmation and settlement. It also surfaces `orphaned`, `reverted`, and
-`mismatch` observations. The deployed demo and hosted API have not been
-promoted to this change. This repository remains pinned to published
-`@gol/sdk@0.5.1`; the source API 0.6.0 response additions are handled
-compatibly until SDK 0.6.0 is published.
+`mismatch` observations. The deployed demo still predates this change. This
+repository is pinned to published `@gol/sdk@0.6.0`; authenticated use of the
+updated Vercel origin has not been verified.
 
 ## What it is
 
@@ -29,8 +28,8 @@ compatibly until SDK 0.6.0 is published.
 
 Local checks current through 2026-09-29; the on-chain evidence below is dated 2026-09-28:
 
-- The GOL platform is recorded on API 0.5.1, compatibility profile 4 is Active,
-  and `@gol/sdk@0.5.1` is the published `latest`. See the
+- The GOL platform serves API 0.6.0, compatibility profile 4 is Active,
+  and `@gol/sdk@0.6.0` is published. See the
   [current availability](https://docs.gol.network/availability) page for the
   public support boundary.
 - `pnpm typecheck`, `pnpm lint`, `pnpm test` (80 tests), and `pnpm build` all pass locally.
@@ -255,7 +254,7 @@ which the `create-onchain-agent` template ships as `latest`.
 
 | Package | Version | Why |
 |---|---|---|
-| `@gol/sdk` | 0.5.1 | The GOL integration surface. Version 3 core, hosted gas API revision 2.0, profile 4. |
+| `@gol/sdk` | 0.6.0 | The GOL integration surface. Version 3 core, hosted gas API revision 2.0, provisional inclusion, profile 4. |
 | `viem` | 2.37.13 | Matches `@gol/sdk`'s exact pin, so this app and the SDK share one instance. |
 | `next` | 16.3.6 | App Router. |
 | `react` | 19.3.0 | Required by Next 16 and by Privy React. |
