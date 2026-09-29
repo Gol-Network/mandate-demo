@@ -86,6 +86,7 @@ export default function OwnerPage() {
   const [status, setStatus] = useState<AccountStatus | null>(null);
   const [step, setStep] = useState<Step>("loading");
   const [note, setNote] = useState("");
+  const [approvalIncluded, setApprovalIncluded] = useState(false);
   const [pending, setPending] = useState<PendingApproval | null>(null);
   const [signedApproval, setSignedApproval] = useState<{
     account: Address;
@@ -93,7 +94,7 @@ export default function OwnerPage() {
     call: { to: Address; data: Hex };
     contacts: MandateFormValues["contacts"];
   } | null>(null);
-  const [setup, setSetup] = useState<{ id: string; state: string } | null>(null);
+  const [setup, setSetup] = useState<{ id: string; state: string; inclusion?: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which of the five possible causes a bad EIP-7702 authorization had, when one
@@ -425,9 +426,10 @@ export default function OwnerPage() {
       const next = { draftId: signedApproval.draftId, txHash, contacts: signedApproval.contacts };
       savePendingApproval(account, next);
       setPending(next);
+      setApprovalIncluded(false);
       setSignedApproval(null);
       setStep("approval-pending");
-      setNote("Approval sent. GOL is waiting for Base's safe head, which can take several minutes.");
+      setNote("Approval sent. Checking for inclusion on Base Sepolia.");
     } catch (caught) {
       setError(describe(caught));
     } finally {
@@ -440,16 +442,36 @@ export default function OwnerPage() {
     void refresh();
   }, [refresh]);
 
-  // Poll the approval until GOL has seen it at the head it settles at.
+  // Show checked inclusion promptly, then keep polling for durable confirmation.
   useEffect(() => {
     if (step !== "approval-pending" || !pending || !account) return;
-    const timer = setInterval(async () => {
+    let inFlight = false;
+    const check = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         const result = await golPost<{ status?: string; policy?: { gasPolicyId: string } }>("/api/gol/confirm-policy", {
           account,
           draftId: pending.draftId,
           transactionHash: pending.txHash,
         });
+        if (result.status === "included") {
+          setApprovalIncluded(true);
+          setNote("Approval included on Base Sepolia. This is provisional; GOL is checking the safe head.");
+        }
+        if (result.status === "orphaned") {
+          setApprovalIncluded(false);
+          setNote("The approval left the current Base Sepolia chain. GOL is checking for re-inclusion.");
+        }
+        if (result.status === "reverted" || result.status === "mismatch") {
+          clearPendingApproval(account);
+          setPending(null);
+          setStep("mandate");
+          setError(result.status === "reverted"
+            ? "The approval transaction reverted. No mandate was approved."
+            : "The transaction did not create the expected GOL approval.");
+          return;
+        }
         if (result.status === "confirmed") {
           if (result.policy?.gasPolicyId) {
             if (user?.id && contactsAreValid(pending.contacts)) {
@@ -472,21 +494,27 @@ export default function OwnerPage() {
           setStep("mandate");
           setError(describe(caught));
         }
-      }
-    }, 5000);
+      } finally { inFlight = false; }
+    };
+    void check();
+    const timer = setInterval(() => void check(), approvalIncluded ? 10_000 : 1_000);
     return () => clearInterval(timer);
-  }, [account, pending, refresh, remember, step, user?.id]);
+  }, [account, approvalIncluded, pending, refresh, remember, step, user?.id]);
 
   // Poll the sponsored setup the same way.
+  const setupId = setup?.id;
   useEffect(() => {
-    if (step !== "setup-pending" || !setup || !account) return;
-    const timer = setInterval(async () => {
+    if (step !== "setup-pending" || !setupId || !account) return;
+    let inFlight = false;
+    const check = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const next = await golPost<Eip7702Setup>("/api/gol/eip7702/status", {
+        const next = await golPost<Eip7702Setup & { inclusion?: string | null }>("/api/gol/eip7702/status", {
           account,
-          setupId: setup.id,
+          setupId,
         });
-        setSetup({ id: next.id, state: next.state });
+        setSetup({ id: next.id, state: next.state, inclusion: next.inclusion });
         if (next.state === "confirmed") {
           setNote("The core is installed. You can approve a mandate now.");
           setStep("mandate");
@@ -495,10 +523,12 @@ export default function OwnerPage() {
         }
       } catch {
         // Keep polling.
-      }
-    }, 5000);
+      } finally { inFlight = false; }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 1000);
     return () => clearInterval(timer);
-  }, [account, setup, step]);
+  }, [account, setupId, step]);
 
   if (!ready) {
     return <main className="p-10 text-neutral-500">Loading Privy...</main>;
@@ -629,8 +659,15 @@ export default function OwnerPage() {
           <section className="rounded-lg border border-neutral-300 bg-white p-5">
             <h2 className="font-semibold">Setting up</h2>
             <p className="mt-1 text-sm text-neutral-600">
-              GOL&apos;s relayer is sending the setup. State {setup?.state}. This page
-              polls every 5 seconds and does not block.
+              GOL&apos;s relayer is sending the setup. State {setup?.state}.
+              {setup?.inclusion === "included"
+                ? " Included on Base Sepolia, pending safe-head confirmation."
+                : setup?.inclusion === "orphaned"
+                  ? " The setup left the current chain. GOL is checking for re-inclusion."
+                  : setup?.inclusion === "reverted" || setup?.inclusion === "mismatch"
+                    ? " The setup did not complete on-chain."
+                    : " Checking for inclusion."}
+              {" "}This page checks every second.
             </p>
           </section>
         )}
@@ -670,11 +707,11 @@ export default function OwnerPage() {
 
         {step === "approval-pending" && pending && (
           <section className="rounded-lg border border-neutral-300 bg-white p-5">
-            <h2 className="font-semibold">Waiting for the approval to confirm</h2>
+            <h2 className="font-semibold">Approval status</h2>
             <p className="mt-1 text-sm text-neutral-600">
-              The sequencer can confirm this transaction before GOL does. GOL waits for
-              two independent providers to see the same receipt at Base&apos;s safe head.
-              This can take several minutes. Checking every 5 seconds.
+              {approvalIncluded
+                ? "Included on Base Sepolia. GOL is still checking the safe head before final confirmation. Checking every 10 seconds."
+                : "Checking for inclusion through Alchemy RPC. Checking every second."}
             </p>
             <a
               className="mt-2 inline-block font-mono text-xs underline"

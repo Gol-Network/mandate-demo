@@ -1,8 +1,8 @@
 /**
  * Confirm a safety action once the owner's transaction is mined.
  *
- * Polled the same way as the approval, for the same reason: the platform settles
- * at Base's `safe` head, so confirmation lags the transaction by minutes.
+ * Polled the same way as approval. `included` is provisional and `confirmed`
+ * follows the selected settlement head.
  */
 import { NextResponse } from "next/server";
 import { getGol, golProjectId } from "@/lib/server/gol";
@@ -38,5 +38,5 @@ export const POST = route(async (request: Request) => {
     transactionHash: requireHex(transactionHash, "transaction_hash"),
     ...(mandateId ? { mandateId: mandateId as `0x${string}` } : {}),
   });
-  return NextResponse.json(result, { status: result.status === "observing" ? 202 : 200 });
+  return NextResponse.json(result, { status: result.status === "confirmed" ? 200 : 202 });
 });

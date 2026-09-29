@@ -1,9 +1,8 @@
 /**
  * Confirm the approval once the owner's transaction is mined.
  *
- * Returns an `observing` status until the platform has seen the approval at the
- * Base head it settles at, which on 2026-09-28 was `safe`, some minutes behind
- * latest. The browser polls rather than waiting on the server.
+ * Returns `included` after a canonical Alchemy RPC check, then `confirmed`
+ * when GOL's selected settlement head catches up.
  */
 import { NextResponse } from "next/server";
 import { getGol, golProjectId } from "@/lib/server/gol";
@@ -24,5 +23,5 @@ export const POST = route(async (request: Request) => {
     String(draftId ?? ""),
     requireHex(transactionHash, "transaction_hash"),
   );
-  return NextResponse.json(result, { status: result.status === "observing" ? 202 : 200 });
+  return NextResponse.json(result, { status: result.status === "confirmed" ? 200 : 202 });
 });

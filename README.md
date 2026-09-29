@@ -7,6 +7,15 @@ the agent.
 This is a consumer of GOL's public SDK and API. It is not part of GOL, and it is
 not audited. Everything here runs on testnet with testnet funds.
 
+This source checkout includes a provisional inclusion display for hosted API 0.6.0.
+It checks approval, setup, and owner safety status every second until
+inclusion, then checks approval and safety safe-head confirmation every 10
+seconds. Action status is checked every two seconds. The UI shows `included`
+separately from safe-head confirmation and settlement. It also surfaces `orphaned`, `reverted`, and
+`mismatch` observations. The deployed demo still predates this change. This
+repository is pinned to published `@gol/sdk@0.6.0`; authenticated use of the
+updated Vercel origin has not been verified.
+
 ## What it is
 
 | Part | What it is |
@@ -17,13 +26,13 @@ not audited. Everything here runs on testnet with testnet funds.
 
 ## Status
 
-Verified as of 2026-09-28:
+Local checks current through 2026-09-29; the on-chain evidence below is dated 2026-09-28:
 
-- The GOL platform is healthy on API 0.5.0, compatibility profile 4 is Active,
-  and `@gol/sdk@0.5.0` is the published `latest`. See the
+- The GOL platform serves API 0.6.0, compatibility profile 4 is Active,
+  and `@gol/sdk@0.6.0` is published. See the
   [current availability](https://docs.gol.network/availability) page for the
   public support boundary.
-- `pnpm typecheck`, `pnpm lint`, `pnpm test` (79 tests), and `pnpm build` all pass.
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` (80 tests), and `pnpm build` all pass locally.
 - **The sponsored setup succeeded end to end on chain.** The owner EOA
   `0x2A9E395887Da36d8300bd7E51865dE7C297bE118` now carries the delegation
   designator `0xef01000000b1c01cb3b5770d8806f0d214d50131a08a5b`, naming the
@@ -165,10 +174,11 @@ The owner signs in Privy; the GOL project API key never leaves the server.
 
 ## Why the owner is a Privy embedded EOA and not a Privy smart wallet
 
-A Privy smart wallet uses Kernel, and no Active GOL profile supports Kernel. It
-would also put the mandate on a different contract address than the plain EOA,
-which changes the story the demo is telling. So the EOA is delegated through
-GOL's own EIP-7702 setup instead.
+GOL profile 4 supports an exact ZeroDev Kernel v0.3.1 configuration, but this
+demo has not verified Privy's smart-wallet configuration against that profile.
+A Privy smart wallet would also put the mandate on a different contract address
+than the owner's EOA, changing the story the demo is telling. So the EOA is
+delegated through GOL's own EIP-7702 setup instead.
 
 Two Privy app settings must be **off**, and they are set in the Privy dashboard
 rather than in code:
@@ -244,7 +254,7 @@ which the `create-onchain-agent` template ships as `latest`.
 
 | Package | Version | Why |
 |---|---|---|
-| `@gol/sdk` | 0.5.0 | The GOL integration surface. Version 3 core, hosted gas API revision 2.0, profile 4. |
+| `@gol/sdk` | 0.6.0 | The GOL integration surface. Version 3 core, hosted gas API revision 2.0, provisional inclusion, profile 4. |
 | `viem` | 2.37.13 | Matches `@gol/sdk`'s exact pin, so this app and the SDK share one instance. |
 | `next` | 16.3.6 | App Router. |
 | `react` | 19.3.0 | Required by Next 16 and by Privy React. |

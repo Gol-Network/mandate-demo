@@ -13,10 +13,17 @@ This repository is a working demo of GOL bounded mandates, with three parts:
    mandate and its gas policy. The agent can move funds only within it, and the
    owner can pause, resume, and revoke without the agent.
 
-It runs on `localhost` and is deployed at
-`https://gol-mandate-demo.vercel.app` from a reviewed source commit.
+It runs on `localhost` and has a Vercel artifact at
+`https://gol-mandate-demo.vercel.app` from source `5f03447`. The public shell and
+unauthenticated route guards were checked; a hosted authenticated owner journey
+has not been observed. The GitHub repository has an `origin` remote, but pushes
+do not currently trigger this Vercel deployment.
 
 This is a consumer of GOL's public surface. It is not part of GOL.
+
+The local source has a provisional inclusion display for hosted API 0.6.0 and
+published SDK 0.6.0. The Vercel artifact from source `5f03447` predates this
+change, and no authenticated hosted demo acceptance is implied.
 
 ## Boundaries
 
@@ -47,9 +54,10 @@ This is a consumer of GOL's public surface. It is not part of GOL.
 Both of these are **off in the Privy dashboard**, not in code, because that is
 where Privy reads them from:
 
-- **Smart wallets off.** A Privy smart wallet is a Kernel account, and no Active
-  GOL profile supports Kernel. It would also move the story to a different
-  contract address.
+- **Smart wallets off.** GOL profile 4 supports an exact ZeroDev Kernel v0.3.1
+  configuration, but this demo has not verified Privy's smart-wallet configuration
+  against that profile. A Privy smart wallet would also use a different contract
+  address from the owner's EOA, changing this demo's account path.
 - **Privy gas sponsorship off.** It can delegate the EOA to Privy's own
   implementation.
 

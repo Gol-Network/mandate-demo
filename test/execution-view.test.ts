@@ -9,8 +9,21 @@ test("a list summary can show a submitted execution before the detail is availab
     id: "execution",
     state: "submitted",
     transactionHashes: [hash],
+    inclusion: null,
     receipt: null,
   });
+});
+
+test("a checked inclusion remains separate from financial settlement", () => {
+  const view = executionView({
+    id: "execution",
+    state: "submitted",
+    transactionHashes: [hash],
+    inclusion: { state: "included", outcome: "success", transactionHash: hash },
+  });
+  assert.deepEqual(view.inclusion, { state: "included", outcome: "success", transactionHash: hash, finalizedAt: null });
+  assert.equal(view.receipt, null);
+  assert.equal(view.state, "submitted");
 });
 
 test("a detailed refusal keeps the receipt code as a number", () => {
