@@ -14,16 +14,17 @@ This repository is a working demo of GOL bounded mandates, with three parts:
    owner can pause, resume, and revoke without the agent.
 
 It runs on `localhost` and has a Vercel artifact at
-`https://gol-mandate-demo.vercel.app` from source `5f03447`. The public shell and
+`https://gol-mandate-demo.vercel.app` from source
+`4cd194aec2b01ee074518f5006f365832fb466d4`. The public shell and
 unauthenticated route guards were checked; a hosted authenticated owner journey
 has not been observed. The GitHub repository has an `origin` remote, but pushes
 do not currently trigger this Vercel deployment.
 
 This is a consumer of GOL's public surface. It is not part of GOL.
 
-The local source has a provisional inclusion display for hosted API 0.6.0 and
-published SDK 0.6.0. The Vercel artifact from source `5f03447` predates this
-change, and no authenticated hosted demo acceptance is implied.
+The local source and current Vercel artifact have a provisional inclusion
+display for hosted API 0.6.0 and published SDK 0.6.0. The hosted authenticated
+owner journey has not been repeated after this promotion.
 
 ## Boundaries
 
