@@ -12,7 +12,7 @@ It checks approval, setup, and owner safety status every second until
 inclusion, then checks approval and safety safe-head confirmation every 10
 seconds. Action status is checked every two seconds. The UI shows `included`
 separately from safe-head confirmation and settlement. It also surfaces `orphaned`, `reverted`, and
-`mismatch` observations. The deployed demo still predates this change. This
+`mismatch` observations. The current Vercel artifact includes this change. This
 repository is pinned to published `@gol/sdk@0.6.0`; authenticated use of the
 updated Vercel origin has not been verified.
 
@@ -116,7 +116,7 @@ The two obligations are different and the page shows them separately:
 
 The owner setup, approval, one agent transfer, and the repaired proof panel have
 been verified live. This owner's on-chain refusal has not been exercised.
-The live refusal remains untested for this owner. Vercel deployment is complete;
+Vercel deployment is complete;
 the authenticated owner journey has not yet been repeated at the hosted origin.
 
 ## Setup
@@ -381,15 +381,21 @@ exists to establish.
 ## Vercel deployment
 
 The public project is [gol-mandate-demo.vercel.app](https://gol-mandate-demo.vercel.app).
-The first ready production artifact is `dpl_HY17Kbjmj3fVyjwx6En32Lix6eFV`, built
-from source commit `5f03447` on 2026-09-28. The Vercel project runs Node.js 24
+The current ready production artifact is `dpl_2nTLhgXmiZz9EfE6EuYmoUYSNGws`,
+uploaded from clean merged source `4cd194aec2b01ee074518f5006f365832fb466d4`
+on 2026-09-29 with `vercel deploy --prod --yes`. The previous ready artifact
+was `dpl_HY17Kbjmj3fVyjwx6En32Lix6eFV` from source `5f03447` on 2026-09-28.
+The Vercel project runs Node.js 24
 and stores the GOL, Privy, OpenAI, and agent credentials in sensitive production
 environment variables. Its browser RPC URL is the keyless
 `https://sepolia.base.org`.
 
-Read-only checks of the production alias returned HTTP 200 for `/` and `/agent`,
-and HTTP 401 for unauthenticated GOL and agent API requests. The local browser
-RPC credential was absent from the downloaded production HTML and scripts.
+Read-only checks of the production alias after the 0.6.0 promotion returned HTTP
+200 for `/` and `/agent`, and HTTP 401 for unauthenticated `/api/gol/config`.
+GET requests to the POST-only setup-status and agent-chat routes returned HTTP
+405. The previous artifact's local browser RPC credential was absent from its
+downloaded production HTML and scripts; the current build still configures the
+keyless `https://sepolia.base.org` browser RPC URL.
 These checks establish a deployed shell and route guards; an authenticated
 Privy-to-GOL run on the Vercel origin has not yet been observed.
 
